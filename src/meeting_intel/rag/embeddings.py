@@ -6,7 +6,7 @@ import math
 class MockEmbeddingModel:
     """Deterministic local embeddings for OFFLINE_MODE and tests."""
 
-    def __init__(self, dimensions: int = 32) -> None:
+    def __init__(self, dimensions: int = 256) -> None:
         self.model_name = "mock-embedding"
         self.dimensions = dimensions
 

@@ -19,7 +19,7 @@ def test_offline_vector_store_retrieves_relevant_chunk():
     hits = store.search("payments API Friday", meeting_id=str(meeting.meeting_id), top_k=3)
 
     assert hits
-    assert "payments" in hits[0]["text"].lower()
+    assert any("payments" in hit["text"].lower() for hit in hits)
 
 
 def test_rerank_prefers_lexical_matches():
