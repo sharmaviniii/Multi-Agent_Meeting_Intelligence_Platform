@@ -1,0 +1,31 @@
+from meeting_intel.schemas.meeting import (
+    ActionItem,
+    AskRequest,
+    AskResponse,
+    Decision,
+    EmailDraftRequest,
+    FollowUp,
+    MeetingDocument,
+    MeetingResponse,
+    Risk,
+    SourceType,
+    SummarizeRequest,
+    TranscriptTurn,
+    UploadRequest,
+)
+
+__all__ = [
+    "ActionItem",
+    "AskRequest",
+    "AskResponse",
+    "Decision",
+    "EmailDraftRequest",
+    "FollowUp",
+    "MeetingDocument",
+    "MeetingResponse",
+    "Risk",
+    "SourceType",
+    "SummarizeRequest",
+    "TranscriptTurn",
+    "UploadRequest",
+]
