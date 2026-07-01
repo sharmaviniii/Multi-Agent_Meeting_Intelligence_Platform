@@ -1,6 +1,6 @@
 # Multi-Agent Meeting Intelligence Platform
 
-Phase 1 implements a working meeting intelligence MVP:
+The platform currently implements a working meeting intelligence MVP:
 
 - FastAPI service
 - MeetingBank downloader and ingestion pipeline
@@ -10,8 +10,10 @@ Phase 1 implements a working meeting intelligence MVP:
 - ChromaDB integration using the single `meeting_memory` collection
 - GPT-4o-mini summarization
 - Offline development mode with mock LLM and mock embeddings
+- Structured meeting intelligence endpoints for actions, decisions, risks, and follow-up email drafts
+- Optional PostgreSQL persistence with Alembic migrations
 
-Later phases will add PostgreSQL, CrewAI, LangGraph, AutoGen, Docker, LangSmith, and GitHub Actions after approval.
+Later phases will add CrewAI, LangGraph, AutoGen, LangSmith, and GitHub Actions after approval.
 
 ## Local Setup
 
@@ -35,6 +37,15 @@ Offline mode:
 - Does not download the local embedding model.
 - Uses deterministic mock embeddings and mock summaries.
 - Lets unit tests run without external services.
+
+Production mode:
+
+- Set `OFFLINE_MODE=false`.
+- Set `OPENAI_API_KEY` to enable GPT-4o-mini calls.
+- Set `JWT_SECRET` to require bearer JWT authentication on protected endpoints.
+- Uses `OPENAI_MODEL=gpt-4o-mini` by default.
+- Uses `BAAI/bge-small-en-v1.5` embeddings through `sentence-transformers`.
+- Stores and retrieves vectors from the configured ChromaDB collection.
 
 ## Run API Locally
 
@@ -145,7 +156,96 @@ CHROMA_COLLECTION=meeting_memory
 OPENAI_API_KEY=...
 ```
 
-Then run a ChromaDB server separately. Phase 1 intentionally does not add Docker.
+Then run a ChromaDB server separately, or use the Docker Compose stack below.
+
+In Docker Compose, ChromaDB is persistent by default through the `chroma_data` volume.
+
+## PostgreSQL Persistence
+
+Offline mode continues to use the in-memory repository and does not require PostgreSQL.
+
+To use PostgreSQL persistence, install the project dependencies, set:
+
+```text
+OFFLINE_MODE=false
+DATABASE_URL=postgresql+psycopg://user:password@localhost:5432/meeting_intel
+```
+
+Then run migrations:
+
+```powershell
+alembic upgrade head
+```
+
+Alembic migration files live in `alembic/versions`.
+
+## Docker Compose
+
+The Compose stack includes:
+
+- FastAPI API container
+- PostgreSQL container
+- ChromaDB container
+
+By default, the API still starts with `OFFLINE_MODE=true`, so it uses mock LLM responses,
+mock embeddings, and in-memory meeting persistence.
+
+Run:
+
+```powershell
+docker compose up --build
+```
+
+Open:
+
+```text
+http://127.0.0.1:8000/docs
+```
+
+To use PostgreSQL persistence in the Docker stack, set `OFFLINE_MODE=false` and run:
+
+```powershell
+docker compose exec api alembic upgrade head
+```
+
+The API container uses this default database URL:
+
+```text
+postgresql+psycopg://meeting_intel:meeting_intel@postgres:5432/meeting_intel
+```
+
+ChromaDB is exposed on host port `8001` and is addressed by the API as `chroma:8000`
+inside the Compose network.
+
+## Security And Operations
+
+When `OFFLINE_MODE=false`, protected endpoints require a bearer JWT signed with
+`JWT_SECRET`. Tokens must include an `exp` claim. Offline mode keeps authentication optional
+for local development and tests.
+
+Rate limiting applies to:
+
+- `POST /upload`
+- `POST /summarize`
+- `POST /ask`
+- `POST /action-items`
+- `POST /decisions`
+- `POST /risks`
+- `POST /email-draft`
+
+Configure rate limits with:
+
+```text
+RATE_LIMIT_REQUESTS=60
+RATE_LIMIT_WINDOW_SECONDS=60
+```
+
+Operational endpoints:
+
+- `GET /health`
+- `GET /ready`
+- `GET /live`
+- `GET /metrics`
 
 ## Tests
 

@@ -25,14 +25,17 @@ class TranscriptTurn(BaseModel):
 
 
 class ActionItem(BaseModel):
+    id: UUID = Field(default_factory=uuid4)
     description: str
     owner: str | None = None
     due_date: str | None = None
     priority: str = "medium"
+    status: str = "open"
     source_quote: str | None = None
 
 
 class Decision(BaseModel):
+    id: UUID = Field(default_factory=uuid4)
     description: str
     owner: str | None = None
     rationale: str | None = None
@@ -40,16 +43,21 @@ class Decision(BaseModel):
 
 
 class Risk(BaseModel):
+    id: UUID = Field(default_factory=uuid4)
     description: str
     severity: str = "medium"
+    probability: str = "medium"
     mitigation: str | None = None
     owner: str | None = None
+    status: str = "open"
 
 
 class FollowUp(BaseModel):
+    id: UUID = Field(default_factory=uuid4)
     recipient: str | None = None
     subject: str
     body: str
+    tone: str = "professional"
 
 
 class MeetingDocument(BaseModel):
@@ -101,7 +109,34 @@ class AskResponse(BaseModel):
     sources: list[dict] = Field(default_factory=list)
 
 
+class MeetingIdRequest(BaseModel):
+    meeting_id: UUID
+
+
+class ActionItemsResponse(BaseModel):
+    meeting_id: UUID
+    action_items: list[ActionItem] = Field(default_factory=list)
+
+
+class DecisionsResponse(BaseModel):
+    meeting_id: UUID
+    decisions: list[Decision] = Field(default_factory=list)
+
+
+class RisksResponse(BaseModel):
+    meeting_id: UUID
+    risks: list[Risk] = Field(default_factory=list)
+
+
 class EmailDraftRequest(BaseModel):
     meeting_id: UUID
     audience: str = "meeting participants"
     tone: str = "professional"
+    include_sections: list[str] = Field(
+        default_factory=lambda: ["summary", "actions", "decisions", "risks"]
+    )
+
+
+class EmailDraftResponse(BaseModel):
+    meeting_id: UUID
+    email: FollowUp

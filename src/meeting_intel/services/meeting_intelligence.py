@@ -1,5 +1,5 @@
 from meeting_intel.core.config import Settings
-from meeting_intel.schemas import MeetingDocument
+from meeting_intel.schemas import ActionItem, Decision, FollowUp, MeetingDocument, Risk
 from meeting_intel.services.llm import LLMClient
 
 
@@ -42,3 +42,164 @@ class MeetingIntelligenceService:
             '{"summary": "string"}',
         )
         return str(final.get("summary", ""))
+
+    async def extract_action_items(self, meeting: MeetingDocument) -> list[ActionItem]:
+        if self.settings.offline_mode or self.llm.client is None:
+            return self._offline_action_items(meeting)
+
+        payload = await self.llm.complete_json(
+            "Extract meeting action items with owner, due date, priority, and source quote.",
+            meeting.transcript_text,
+            '{"action_items": [{"description": "string", "owner": "string|null", '
+            '"due_date": "string|null", "priority": "low|medium|high", '
+            '"source_quote": "string|null"}]}',
+        )
+        return [ActionItem(**item) for item in payload.get("action_items", [])]
+
+    async def extract_decisions(self, meeting: MeetingDocument) -> list[Decision]:
+        if self.settings.offline_mode or self.llm.client is None:
+            return self._offline_decisions(meeting)
+
+        payload = await self.llm.complete_json(
+            "Extract decisions made in the meeting with owner, rationale, and source quote.",
+            meeting.transcript_text,
+            '{"decisions": [{"description": "string", "owner": "string|null", '
+            '"rationale": "string|null", "source_quote": "string|null"}]}',
+        )
+        return [Decision(**item) for item in payload.get("decisions", [])]
+
+    async def extract_risks(self, meeting: MeetingDocument) -> list[Risk]:
+        if self.settings.offline_mode or self.llm.client is None:
+            return self._offline_risks(meeting)
+
+        payload = await self.llm.complete_json(
+            "Extract meeting risks with severity, probability, mitigation, owner, "
+            "and source quote.",
+            meeting.transcript_text,
+            '{"risks": [{"description": "string", "severity": "low|medium|high", '
+            '"probability": "low|medium|high", "mitigation": "string|null", '
+            '"owner": "string|null"}]}',
+        )
+        return [Risk(**item) for item in payload.get("risks", [])]
+
+    async def draft_follow_up_email(
+        self,
+        meeting: MeetingDocument,
+        audience: str = "meeting participants",
+        tone: str = "professional",
+        include_sections: list[str] | None = None,
+    ) -> FollowUp:
+        sections = include_sections or ["summary", "actions", "decisions", "risks"]
+        if self.settings.offline_mode or self.llm.client is None:
+            return self._offline_email(meeting, audience, tone, sections)
+
+        payload = await self.llm.complete_json(
+            "Draft a follow-up email from meeting intelligence.",
+            self._email_context(meeting, audience, tone, sections),
+            '{"recipient": "string", "subject": "string", "body": "string"}',
+        )
+        return FollowUp(
+            recipient=str(payload.get("recipient") or audience),
+            subject=str(payload.get("subject") or f"Follow-up: {meeting.title}"),
+            body=str(payload.get("body") or ""),
+            tone=tone,
+        )
+
+    def _offline_action_items(self, meeting: MeetingDocument) -> list[ActionItem]:
+        action_items = []
+        cues = (" will ", " need to ", " needs to ", " should ", " by ")
+        for turn in meeting.transcript:
+            lowered = f" {turn.text.lower()} "
+            if any(cue in lowered for cue in cues):
+                action_items.append(
+                    ActionItem(
+                        description=turn.text,
+                        owner=turn.speaker if turn.speaker != "Unknown" else None,
+                        due_date="Friday" if "friday" in lowered else None,
+                        priority="high" if "must" in lowered or "urgent" in lowered else "medium",
+                        source_quote=f"{turn.speaker}: {turn.text}",
+                    )
+                )
+        return action_items
+
+    def _offline_decisions(self, meeting: MeetingDocument) -> list[Decision]:
+        decisions = []
+        cues = ("decided", "decision", "agreed", "approved", "let's", "we will")
+        for turn in meeting.transcript:
+            lowered = turn.text.lower()
+            if any(cue in lowered for cue in cues):
+                decisions.append(
+                    Decision(
+                        description=turn.text,
+                        owner=turn.speaker if turn.speaker != "Unknown" else None,
+                        rationale="Offline extraction identified decision-oriented language.",
+                        source_quote=f"{turn.speaker}: {turn.text}",
+                    )
+                )
+        return decisions
+
+    def _offline_risks(self, meeting: MeetingDocument) -> list[Risk]:
+        risks = []
+        cues = ("risk", "blocked", "blocker", "concern", "delay", "issue", "problem")
+        for turn in meeting.transcript:
+            lowered = turn.text.lower()
+            if any(cue in lowered for cue in cues):
+                risks.append(
+                    Risk(
+                        description=turn.text,
+                        severity=(
+                            "high"
+                            if "blocked" in lowered or "blocker" in lowered
+                            else "medium"
+                        ),
+                        probability="medium",
+                        mitigation="Review owner, timeline, and fallback plan.",
+                        owner=turn.speaker if turn.speaker != "Unknown" else None,
+                    )
+                )
+        return risks
+
+    def _offline_email(
+        self,
+        meeting: MeetingDocument,
+        audience: str,
+        tone: str,
+        include_sections: list[str],
+    ) -> FollowUp:
+        lines = [f"Hi {audience},", "", f"Here is the follow-up for {meeting.title}."]
+        if "summary" in include_sections and meeting.summary:
+            lines.extend(["", f"Summary: {meeting.summary}"])
+        if "actions" in include_sections and meeting.action_items:
+            lines.extend(["", "Action items:"])
+            lines.extend(f"- {item.description}" for item in meeting.action_items)
+        if "decisions" in include_sections and meeting.decisions:
+            lines.extend(["", "Decisions:"])
+            lines.extend(f"- {decision.description}" for decision in meeting.decisions)
+        if "risks" in include_sections and meeting.risks:
+            lines.extend(["", "Risks:"])
+            lines.extend(f"- {risk.description}" for risk in meeting.risks)
+        lines.extend(["", "Thanks,"])
+        return FollowUp(
+            recipient=audience,
+            subject=f"Follow-up: {meeting.title}",
+            body="\n".join(lines),
+            tone=tone,
+        )
+
+    def _email_context(
+        self,
+        meeting: MeetingDocument,
+        audience: str,
+        tone: str,
+        include_sections: list[str],
+    ) -> str:
+        return (
+            f"Meeting: {meeting.title}\n"
+            f"Audience: {audience}\n"
+            f"Tone: {tone}\n"
+            f"Sections: {', '.join(include_sections)}\n"
+            f"Summary: {meeting.summary}\n"
+            f"Action items: {[item.model_dump(mode='json') for item in meeting.action_items]}\n"
+            f"Decisions: {[item.model_dump(mode='json') for item in meeting.decisions]}\n"
+            f"Risks: {[item.model_dump(mode='json') for item in meeting.risks]}"
+        )

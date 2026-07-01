@@ -48,7 +48,11 @@ class InMemoryMeetingStore:
 
 
 class ChromaMeetingStore:
-    def __init__(self, settings: Settings, embedding_model: LocalEmbeddingModel | MockEmbeddingModel) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        embedding_model: LocalEmbeddingModel | MockEmbeddingModel,
+    ) -> None:
         self.settings = settings
         self.embedding_model = embedding_model
         self._collection = None
@@ -61,8 +65,14 @@ class ChromaMeetingStore:
         if self._collection is None:
             import chromadb
 
-            client = chromadb.HttpClient(host=self.settings.chroma_host, port=self.settings.chroma_port)
-            self._collection = client.get_or_create_collection(self.settings.chroma_collection)
+            client = chromadb.HttpClient(
+                host=self.settings.chroma_host,
+                port=self.settings.chroma_port,
+            )
+            self._collection = client.get_or_create_collection(
+                self.settings.chroma_collection,
+                metadata={"hnsw:space": "cosine"},
+            )
         return self._collection
 
     def upsert_chunks(self, chunks: list[TextChunk]) -> None:

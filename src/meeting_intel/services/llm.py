@@ -8,10 +8,14 @@ class LLMClient:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
         self.client = None
-        if settings.openai_api_key and not settings.offline_mode:
+        if not settings.offline_mode and settings.openai_api_key:
             from openai import AsyncOpenAI
 
             self.client = AsyncOpenAI(api_key=settings.openai_api_key)
+
+    @property
+    def production_enabled(self) -> bool:
+        return self.client is not None
 
     async def complete_json(self, system: str, user: str, schema_hint: str) -> dict[str, Any]:
         if self.client is None:

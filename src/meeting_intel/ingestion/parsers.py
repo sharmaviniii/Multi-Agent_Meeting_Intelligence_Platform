@@ -3,7 +3,6 @@ from pathlib import Path
 
 from meeting_intel.schemas import MeetingDocument, SourceType, TranscriptTurn
 
-
 SPEAKER_LINE = re.compile(r"^\s*(?P<speaker>[A-Za-z][\w .'-]{0,60})\s*:\s*(?P<text>.+)$")
 
 
@@ -64,8 +63,11 @@ def parse_file(path: Path, title: str | None = None) -> MeetingDocument:
         return parse_pdf(path, title or path.stem)
     if suffix == ".docx":
         return parse_docx(path, title or path.stem)
-    return parse_transcript_text(path.read_text(encoding="utf-8"), title or path.stem, SourceType.txt)
-
+    return parse_transcript_text(
+    path.read_text(encoding="utf-8"),
+    title or path.stem,
+    SourceType.txt,
+)
 
 def parse_pdf(path: Path, title: str) -> MeetingDocument:
     from pypdf import PdfReader

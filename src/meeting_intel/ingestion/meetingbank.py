@@ -6,7 +6,6 @@ from meeting_intel.core.config import Settings
 from meeting_intel.ingestion.parsers import normalize_meetingbank_record
 from meeting_intel.schemas import MeetingDocument
 
-
 DEFAULT_SAMPLE = {
     "id": "sample-001",
     "title": "MeetingBank Sample Council Meeting",

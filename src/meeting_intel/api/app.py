@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from meeting_intel.api.errors import install_exception_handlers
 from meeting_intel.api.middleware import RequestContextMiddleware
@@ -13,7 +14,16 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="Meeting Intelligence Phase 1 API",
         version="0.1.0",
-        description="FastAPI, MeetingBank ingestion, ChromaDB retrieval, and GPT-4o-mini summarization.",
+        description=(
+    "FastAPI, MeetingBank ingestion, "
+    "ChromaDB retrieval, and GPT-4o-mini summarization."),   )
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["http://localhost:5173"],
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
+        expose_headers=["X-Request-ID"],
     )
     app.add_middleware(RequestContextMiddleware)
     install_exception_handlers(app)

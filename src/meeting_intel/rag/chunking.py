@@ -11,7 +11,11 @@ class TextChunk:
     metadata: dict
 
 
-def chunk_meeting(document: MeetingDocument, max_chars: int = 1200, overlap: int = 160) -> list[TextChunk]:
+def chunk_meeting(
+    document: MeetingDocument,
+    max_chars: int = 1200,
+    overlap: int = 160,
+) -> list[TextChunk]:
     if overlap >= max_chars:
         raise ValueError("overlap must be smaller than max_chars")
 

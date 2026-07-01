@@ -17,6 +17,13 @@ def _int_env(name: str, default: int) -> int:
     return int(value)
 
 
+def _float_env(name: str, default: float) -> float:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return float(value)
+
+
 @dataclass(frozen=True)
 class Settings:
     app_env: str = os.getenv("APP_ENV", "local")
@@ -36,6 +43,12 @@ class Settings:
     chunk_overlap_chars: int = _int_env("CHUNK_OVERLAP_CHARS", 160)
     meetingbank_url: str | None = os.getenv("MEETINGBANK_URL") or None
     data_dir: str = os.getenv("DATA_DIR", "data")
+    database_url: str | None = os.getenv("DATABASE_URL") or None
+    jwt_secret: str | None = os.getenv("JWT_SECRET") or None
+    jwt_issuer: str = os.getenv("JWT_ISSUER", "meeting-intelligence")
+    jwt_expiration_minutes: int = _int_env("JWT_EXPIRATION_MINUTES", 60)
+    rate_limit_requests: int = _int_env("RATE_LIMIT_REQUESTS", 60)
+    rate_limit_window_seconds: float = _float_env("RATE_LIMIT_WINDOW_SECONDS", 60.0)
 
 
 @lru_cache

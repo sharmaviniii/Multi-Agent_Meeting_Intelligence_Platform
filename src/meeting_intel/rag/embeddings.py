@@ -1,6 +1,6 @@
-from functools import lru_cache
 import hashlib
 import math
+from functools import lru_cache
 
 
 class MockEmbeddingModel:

@@ -1,7 +1,7 @@
 import json
 import logging
 from contextvars import ContextVar
-from datetime import datetime
+from datetime import UTC, datetime
 from uuid import uuid4
 
 request_id_var: ContextVar[str] = ContextVar("request_id", default="-")
@@ -9,6 +9,11 @@ request_id_var: ContextVar[str] = ContextVar("request_id", default="-")
 
 def new_request_id() -> str:
     request_id = str(uuid4())
+    request_id_var.set(request_id)
+    return request_id
+
+
+def set_request_id(request_id: str) -> str:
     request_id_var.set(request_id)
     return request_id
 
@@ -25,7 +30,7 @@ class JsonLogger:
 
     def _format(self, event: str, fields: dict) -> str:
         payload = {
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "level": "info",
             "event": event,
             "request_id": request_id_var.get(),
