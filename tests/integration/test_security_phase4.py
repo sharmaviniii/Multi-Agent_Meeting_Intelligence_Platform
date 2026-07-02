@@ -18,7 +18,7 @@ class NoopVectorStore:
         return []
 
 
-def test_protected_endpoint_rejects_missing_token_in_production():
+def test_public_endpoint_accepts_missing_token_in_production():
     app = create_app()
     app.dependency_overrides[settings_dep] = lambda: Settings(
         offline_mode=False,
@@ -33,10 +33,10 @@ def test_protected_endpoint_rejects_missing_token_in_production():
         json={"title": "Secure", "text": "Asha: Hello"},
     )
 
-    assert response.status_code == 401
+    assert response.status_code == 200
 
 
-def test_protected_endpoint_accepts_valid_token_in_production():
+def test_public_endpoint_accepts_valid_token_in_production():
     app = create_app()
     repo = InMemoryMeetingRepository()
     app.dependency_overrides[settings_dep] = lambda: Settings(
@@ -58,7 +58,7 @@ def test_protected_endpoint_accepts_valid_token_in_production():
     assert response.json()["meeting"]["title"] == "Secure"
 
 
-def test_protected_endpoint_rejects_invalid_token_in_production():
+def test_public_endpoint_accepts_invalid_token_in_production():
     app = create_app()
     app.dependency_overrides[settings_dep] = lambda: Settings(
         offline_mode=False,
@@ -74,10 +74,10 @@ def test_protected_endpoint_rejects_invalid_token_in_production():
         json={"title": "Secure", "text": "Asha: Hello"},
     )
 
-    assert response.status_code == 401
+    assert response.status_code == 200
 
 
-def test_protected_endpoint_rejects_expired_token_in_production():
+def test_public_endpoint_accepts_expired_token_in_production():
     app = create_app()
     app.dependency_overrides[settings_dep] = lambda: Settings(
         offline_mode=False,
@@ -94,7 +94,7 @@ def test_protected_endpoint_rejects_expired_token_in_production():
         json={"title": "Secure", "text": "Asha: Hello"},
     )
 
-    assert response.status_code == 401
+    assert response.status_code == 200
 
 
 def test_rate_limiter_rejects_requests_after_limit():

@@ -7,7 +7,6 @@ from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from starlette.responses import Response
 
 from meeting_intel.api.dependencies import (
-    current_user_dep,
     intelligence_dep,
     rate_limit_dep,
     repository_dep,
@@ -42,7 +41,6 @@ SETTINGS_DEP = Depends(settings_dep)
 REPOSITORY_DEP = Depends(repository_dep)
 VECTOR_STORE_DEP = Depends(vector_store_dep)
 INTELLIGENCE_DEP = Depends(intelligence_dep)
-AUTH_DEP = Depends(current_user_dep)
 RATE_LIMIT_DEP = Depends(rate_limit_dep)
 
 
@@ -59,7 +57,6 @@ async def upload(
     settings: Settings = SETTINGS_DEP,
     repo: MeetingRepository = REPOSITORY_DEP,
     store: ChromaMeetingStore = VECTOR_STORE_DEP,
-    _: dict = AUTH_DEP,
     __: None = RATE_LIMIT_DEP,
 ):
     meeting = await _parse_upload_request(request)
@@ -109,7 +106,6 @@ async def summarize(
     repo: MeetingRepository = REPOSITORY_DEP,
     store: ChromaMeetingStore = VECTOR_STORE_DEP,
     intelligence: MeetingIntelligenceService = INTELLIGENCE_DEP,
-    _: dict = AUTH_DEP,
     __: None = RATE_LIMIT_DEP,
 ):
     if payload.meeting_id:
@@ -156,7 +152,6 @@ async def ask(
     payload: AskRequest,
     store: ChromaMeetingStore = VECTOR_STORE_DEP,
     intelligence: MeetingIntelligenceService = INTELLIGENCE_DEP,
-    _: dict = AUTH_DEP,
     __: None = RATE_LIMIT_DEP,
 ):
     workflow = MeetingIntelligenceWorkflow(store, intelligence)
@@ -174,7 +169,6 @@ async def action_items(
     repo: MeetingRepository = REPOSITORY_DEP,
     store: ChromaMeetingStore = VECTOR_STORE_DEP,
     intelligence: MeetingIntelligenceService = INTELLIGENCE_DEP,
-    _: dict = AUTH_DEP,
     __: None = RATE_LIMIT_DEP,
 ):
     meeting = await _get_existing_meeting(payload.meeting_id, repo)
@@ -195,7 +189,6 @@ async def decisions(
     repo: MeetingRepository = REPOSITORY_DEP,
     store: ChromaMeetingStore = VECTOR_STORE_DEP,
     intelligence: MeetingIntelligenceService = INTELLIGENCE_DEP,
-    _: dict = AUTH_DEP,
     __: None = RATE_LIMIT_DEP,
 ):
     meeting = await _get_existing_meeting(payload.meeting_id, repo)
@@ -216,7 +209,6 @@ async def risks(
     repo: MeetingRepository = REPOSITORY_DEP,
     store: ChromaMeetingStore = VECTOR_STORE_DEP,
     intelligence: MeetingIntelligenceService = INTELLIGENCE_DEP,
-    _: dict = AUTH_DEP,
     __: None = RATE_LIMIT_DEP,
 ):
     meeting = await _get_existing_meeting(payload.meeting_id, repo)
@@ -237,7 +229,6 @@ async def email_draft(
     repo: MeetingRepository = REPOSITORY_DEP,
     store: ChromaMeetingStore = VECTOR_STORE_DEP,
     intelligence: MeetingIntelligenceService = INTELLIGENCE_DEP,
-    _: dict = AUTH_DEP,
     __: None = RATE_LIMIT_DEP,
 ):
     meeting = await _get_existing_meeting(payload.meeting_id, repo)
@@ -261,7 +252,6 @@ async def ingest_meetingbank_endpoint(
     settings: Settings = SETTINGS_DEP,
     repo: MeetingRepository = REPOSITORY_DEP,
     store: ChromaMeetingStore = VECTOR_STORE_DEP,
-    _: dict = AUTH_DEP,
 ):
     meetings = ingest_meetingbank(settings)
     for meeting in meetings:
@@ -284,7 +274,6 @@ async def ingest_meetingbank_endpoint(
 async def get_meeting(
     meeting_id: UUID,
     repo: MeetingRepository = REPOSITORY_DEP,
-    _: dict = AUTH_DEP,
 ):
     meeting = await repo.get(meeting_id)
     if meeting is None:
@@ -296,7 +285,6 @@ async def get_meeting(
 async def get_transcript(
     meeting_id: UUID,
     repo: MeetingRepository = REPOSITORY_DEP,
-    _: dict = AUTH_DEP,
 ):
     meeting = await _get_existing_meeting(meeting_id, repo)
     return MeetingResponse(meeting=meeting)
@@ -309,7 +297,6 @@ async def get_summary(
     repo: MeetingRepository = REPOSITORY_DEP,
     store: ChromaMeetingStore = VECTOR_STORE_DEP,
     intelligence: MeetingIntelligenceService = INTELLIGENCE_DEP,
-    _: dict = AUTH_DEP,
 ):
     meeting = await _get_existing_meeting(meeting_id, repo)
     if not meeting.summary:
@@ -332,7 +319,6 @@ async def get_action_items(
     repo: MeetingRepository = REPOSITORY_DEP,
     store: ChromaMeetingStore = VECTOR_STORE_DEP,
     intelligence: MeetingIntelligenceService = INTELLIGENCE_DEP,
-    _: dict = AUTH_DEP,
 ):
     meeting = await _get_existing_meeting(meeting_id, repo)
     if not meeting.action_items:
@@ -353,7 +339,6 @@ async def get_decisions(
     repo: MeetingRepository = REPOSITORY_DEP,
     store: ChromaMeetingStore = VECTOR_STORE_DEP,
     intelligence: MeetingIntelligenceService = INTELLIGENCE_DEP,
-    _: dict = AUTH_DEP,
 ):
     meeting = await _get_existing_meeting(meeting_id, repo)
     if not meeting.decisions:
@@ -374,7 +359,6 @@ async def get_risks(
     repo: MeetingRepository = REPOSITORY_DEP,
     store: ChromaMeetingStore = VECTOR_STORE_DEP,
     intelligence: MeetingIntelligenceService = INTELLIGENCE_DEP,
-    _: dict = AUTH_DEP,
 ):
     meeting = await _get_existing_meeting(meeting_id, repo)
     if not meeting.risks:
@@ -395,7 +379,6 @@ async def get_email_draft(
     repo: MeetingRepository = REPOSITORY_DEP,
     store: ChromaMeetingStore = VECTOR_STORE_DEP,
     intelligence: MeetingIntelligenceService = INTELLIGENCE_DEP,
-    _: dict = AUTH_DEP,
 ):
     meeting = await _get_existing_meeting(meeting_id, repo)
     if not meeting.follow_ups:
