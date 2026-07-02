@@ -26,6 +26,40 @@ def test_upload_summarize_and_ask_offline():
     assert "sources" in ask_response.json()
 
 
+def test_upload_accepts_multipart_transcript_file():
+    client = TestClient(create_app())
+    transcript = b"Asha: We need the demo ready by Friday.\nRahul: I will finish the API."
+
+    upload_response = client.post(
+        "/upload",
+        files={"file": ("demo.txt", transcript, "text/plain")},
+    )
+
+    assert upload_response.status_code == 200
+    meeting = upload_response.json()["meeting"]
+    assert meeting["title"] == "demo"
+    assert meeting["source_type"] == "txt"
+    assert meeting["transcript"][0]["speaker"] == "Asha"
+
+
+def test_upload_openapi_schema_advertises_file_upload():
+    client = TestClient(create_app())
+
+    upload_schema = client.get("/openapi.json").json()["paths"]["/upload"]["post"]
+
+    assert "multipart/form-data" in upload_schema["requestBody"]["content"]
+    schema_ref = upload_schema["requestBody"]["content"]["multipart/form-data"]["schema"]["$ref"]
+    schema_name = schema_ref.rsplit("/", 1)[-1]
+    file_schema = client.get("/openapi.json").json()["components"]["schemas"][schema_name][
+        "properties"
+    ]["file"]
+    file_variants = file_schema.get("anyOf", [file_schema])
+    assert {
+        "type": "string",
+        "contentMediaType": "application/octet-stream",
+    } in file_variants
+
+
 def test_phase2_structured_intelligence_endpoints_offline():
     client = TestClient(create_app())
     transcript = (

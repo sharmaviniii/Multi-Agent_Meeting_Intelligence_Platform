@@ -2,7 +2,7 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, File, Request, UploadFile
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from starlette.responses import Response
 
@@ -54,12 +54,13 @@ async def _get_existing_meeting(meeting_id: UUID, repo: MeetingRepository):
 @router.post("/upload", response_model=MeetingResponse)
 async def upload(
     request: Request,
+    file: UploadFile | None = File(None),
     settings: Settings = SETTINGS_DEP,
     repo: MeetingRepository = REPOSITORY_DEP,
     store: ChromaMeetingStore = VECTOR_STORE_DEP,
     __: None = RATE_LIMIT_DEP,
 ):
-    meeting = await _parse_upload_request(request)
+    meeting = await _parse_upload_request(request, file)
     chunks = chunk_meeting(meeting, settings.chunk_max_chars, settings.chunk_overlap_chars)
     store.upsert_chunks(chunks)
     meeting.embeddings_metadata = {
@@ -74,12 +75,10 @@ async def upload(
     return MeetingResponse(meeting=meeting)
 
 
-async def _parse_upload_request(request: Request):
+async def _parse_upload_request(request: Request, upload_file: UploadFile | None):
     content_type = request.headers.get("content-type", "")
     if content_type.startswith("multipart/form-data"):
-        form = await request.form()
-        upload_file = form.get("file")
-        if not hasattr(upload_file, "read"):
+        if upload_file is None:
             raise NotFoundError("A transcript file is required")
         suffix = Path(upload_file.filename or "meeting.txt").suffix.lower()
         with NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
