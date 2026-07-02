@@ -103,7 +103,7 @@ export type ApiError = {
   message: string;
   requestId?: string;
   status?: number;
-  type: "network" | "client" | "server" | "malformed";
+  type: "network" | "not_found" | "client" | "server" | "malformed";
 };
 
 type RequestOptions = {
@@ -172,6 +172,7 @@ export function toApiError(error: unknown): ApiError {
   if (error instanceof AxiosError) {
     const status = error.response?.status;
     const requestId = error.response?.headers["x-request-id"];
+    const detail = extractErrorDetail(error.response?.data);
     if (!status) {
       return {
         message: "Could not reach the backend. Confirm FastAPI is running on VITE_API_URL.",
@@ -179,16 +180,26 @@ export function toApiError(error: unknown): ApiError {
         type: "network",
       };
     }
+    if (status === 404) {
+      return {
+        message: detail ?? "This meeting artifact is not available yet.",
+        requestId,
+        status,
+        type: "not_found",
+      };
+    }
     if (status >= 500) {
       return {
-        message: "The backend failed while processing this meeting. Try again after checking logs.",
+        message:
+          detail ??
+          "The backend failed while processing this meeting. Try again after checking logs.",
         requestId,
         status,
         type: "server",
       };
     }
     return {
-      message: `The backend rejected this request with HTTP ${status}.`,
+      message: detail ?? `The backend rejected this request with HTTP ${status}.`,
       requestId,
       status,
       type: "client",
@@ -202,4 +213,9 @@ export function toApiError(error: unknown): ApiError {
 
 function parseResponse<TSchema extends z.ZodTypeAny>(schema: TSchema, data: unknown) {
   return schema.parse(data) as z.infer<TSchema>;
+}
+
+function extractErrorDetail(data: unknown) {
+  const result = z.object({ detail: z.string() }).safeParse(data);
+  return result.success ? result.data.detail : undefined;
 }

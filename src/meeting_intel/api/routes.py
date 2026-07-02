@@ -2,7 +2,7 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, Request, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from starlette.responses import Response
 
@@ -58,21 +58,97 @@ async def upload(
     settings: Settings = SETTINGS_DEP,
     repo: MeetingRepository = REPOSITORY_DEP,
     store: ChromaMeetingStore = VECTOR_STORE_DEP,
+    intelligence: MeetingIntelligenceService = INTELLIGENCE_DEP,
     __: None = RATE_LIMIT_DEP,
 ):
     meeting = await _parse_upload_request(request, file)
+    _index_meeting_chunks(meeting, settings, store)
+    await _generate_full_analysis(meeting, store, intelligence)
+    await repo.save(meeting)
+    return MeetingResponse(meeting=meeting)
+
+
+def _index_meeting_chunks(
+    meeting,
+    settings: Settings,
+    store: ChromaMeetingStore,
+) -> None:
     chunks = chunk_meeting(meeting, settings.chunk_max_chars, settings.chunk_overlap_chars)
     store.upsert_chunks(chunks)
     meeting.embeddings_metadata = {
         "collection": settings.chroma_collection,
-        "embedding_model": (
-            settings.embedding_model if not settings.offline_mode else "mock-embedding"
-        ),
+        "embedding_model": settings.embedding_model,
         "chunk_count": len(chunks),
         "offline_mode": settings.offline_mode,
+        "analysis_generated": meeting.embeddings_metadata.get("analysis_generated", False),
     }
-    await repo.save(meeting)
-    return MeetingResponse(meeting=meeting)
+
+
+async def _generate_full_analysis(
+    meeting,
+    store: ChromaMeetingStore,
+    intelligence: MeetingIntelligenceService,
+) -> None:
+    workflow = MeetingIntelligenceWorkflow(store, intelligence)
+    try:
+        if not meeting.summary:
+            result = await workflow.run(
+                question="Summarize this meeting",
+                meeting=meeting,
+                intent="summarization",
+            )
+            meeting.summary = result.get("summary", "")
+
+        if not meeting.action_items:
+            result = await workflow.run(
+                question="Extract action items",
+                meeting=meeting,
+                intent="action_items",
+            )
+            meeting.action_items = result.get("action_items", [])
+
+        if not meeting.decisions:
+            result = await workflow.run(
+                question="Extract decisions",
+                meeting=meeting,
+                intent="decisions",
+            )
+            meeting.decisions = result.get("decisions", [])
+
+        if not meeting.risks:
+            result = await workflow.run(
+                question="Extract risks",
+                meeting=meeting,
+                intent="risks",
+            )
+            meeting.risks = result.get("risks", [])
+
+        if not meeting.follow_ups:
+            result = await workflow.run(
+                question="Draft follow-up email",
+                meeting=meeting,
+                intent="email_draft",
+            )
+            email = result.get("email")
+            if email is not None:
+                meeting.follow_ups = [email]
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="LLM provider unavailable while generating meeting analysis",
+        ) from exc
+
+    meeting.embeddings_metadata["analysis_generated"] = True
+
+
+async def _run_analysis_workflow(workflow: MeetingIntelligenceWorkflow, **kwargs):
+    try:
+        return await workflow.run(**kwargs)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="LLM provider unavailable while generating meeting analysis",
+        ) from exc
 
 
 async def _parse_upload_request(request: Request, upload_file: UploadFile | None):
@@ -120,28 +196,20 @@ async def summarize(
             source_type=payload.source_type,
             participants=payload.participants,
         )
-    chunks = chunk_meeting(meeting, settings.chunk_max_chars, settings.chunk_overlap_chars)
-    store.upsert_chunks(chunks)
+    _index_meeting_chunks(meeting, settings, store)
     workflow = MeetingIntelligenceWorkflow(store, intelligence)
-    result = await workflow.run(
+    result = await _run_analysis_workflow(
+        workflow,
         question="Summarize this meeting",
         meeting=meeting,
         intent="summarization",
     )
     meeting.summary = result.get("summary", "")
-    meeting.embeddings_metadata = {
-        "collection": settings.chroma_collection,
-        "embedding_model": (
-            settings.embedding_model if not settings.offline_mode else "mock-embedding"
-        ),
-        "chunk_count": len(chunks),
-        "offline_mode": settings.offline_mode,
-        "summarization_strategy": (
-            "map_reduce"
-            if len(meeting.transcript_text) > settings.max_transcript_chars_for_direct_summary
-            else "direct"
-        ),
-    }
+    meeting.embeddings_metadata["summarization_strategy"] = (
+        "map_reduce"
+        if len(meeting.transcript_text) > settings.max_transcript_chars_for_direct_summary
+        else "direct"
+    )
     await repo.save(meeting)
     return MeetingResponse(meeting=meeting)
 
@@ -154,7 +222,8 @@ async def ask(
     __: None = RATE_LIMIT_DEP,
 ):
     workflow = MeetingIntelligenceWorkflow(store, intelligence)
-    result = await workflow.run(
+    result = await _run_analysis_workflow(
+        workflow,
         question=payload.question,
         top_k=payload.top_k,
         meeting_id=str(payload.meeting_id) if payload.meeting_id else None,
@@ -172,7 +241,8 @@ async def action_items(
 ):
     meeting = await _get_existing_meeting(payload.meeting_id, repo)
     workflow = MeetingIntelligenceWorkflow(store, intelligence)
-    result = await workflow.run(
+    result = await _run_analysis_workflow(
+        workflow,
         question="Extract action items",
         meeting=meeting,
         intent="action_items",
@@ -192,7 +262,8 @@ async def decisions(
 ):
     meeting = await _get_existing_meeting(payload.meeting_id, repo)
     workflow = MeetingIntelligenceWorkflow(store, intelligence)
-    result = await workflow.run(
+    result = await _run_analysis_workflow(
+        workflow,
         question="Extract decisions",
         meeting=meeting,
         intent="decisions",
@@ -212,7 +283,8 @@ async def risks(
 ):
     meeting = await _get_existing_meeting(payload.meeting_id, repo)
     workflow = MeetingIntelligenceWorkflow(store, intelligence)
-    result = await workflow.run(
+    result = await _run_analysis_workflow(
+        workflow,
         question="Extract risks",
         meeting=meeting,
         intent="risks",
@@ -232,7 +304,8 @@ async def email_draft(
 ):
     meeting = await _get_existing_meeting(payload.meeting_id, repo)
     workflow = MeetingIntelligenceWorkflow(store, intelligence)
-    result = await workflow.run(
+    result = await _run_analysis_workflow(
+        workflow,
         question="Draft follow-up email",
         meeting=meeting,
         intent="email_draft",
@@ -240,7 +313,9 @@ async def email_draft(
         tone=payload.tone,
         include_sections=payload.include_sections,
     )
-    email = result["email"]
+    email = result.get("email")
+    if email is None:
+        raise NotFoundError("Email draft not generated yet")
     meeting.follow_ups = [email]
     await repo.save(meeting)
     return EmailDraftResponse(meeting_id=meeting.meeting_id, email=email)
@@ -299,35 +374,26 @@ async def get_summary(
 ):
     meeting = await _get_existing_meeting(meeting_id, repo)
     if not meeting.summary:
-        chunks = chunk_meeting(meeting, settings.chunk_max_chars, settings.chunk_overlap_chars)
-        store.upsert_chunks(chunks)
-        workflow = MeetingIntelligenceWorkflow(store, intelligence)
-        result = await workflow.run(
-            question="Summarize this meeting",
-            meeting=meeting,
-            intent="summarization",
-        )
-        meeting.summary = result.get("summary", "")
+        _index_meeting_chunks(meeting, settings, store)
+        await _generate_full_analysis(meeting, store, intelligence)
         await repo.save(meeting)
+    if not meeting.summary:
+        raise NotFoundError("Summary not generated yet")
     return MeetingResponse(meeting=meeting)
 
 
 @router.get("/action-items/{meeting_id}", response_model=ActionItemsResponse)
 async def get_action_items(
     meeting_id: UUID,
+    settings: Settings = SETTINGS_DEP,
     repo: MeetingRepository = REPOSITORY_DEP,
     store: ChromaMeetingStore = VECTOR_STORE_DEP,
     intelligence: MeetingIntelligenceService = INTELLIGENCE_DEP,
 ):
     meeting = await _get_existing_meeting(meeting_id, repo)
     if not meeting.action_items:
-        workflow = MeetingIntelligenceWorkflow(store, intelligence)
-        result = await workflow.run(
-            question="Extract action items",
-            meeting=meeting,
-            intent="action_items",
-        )
-        meeting.action_items = result.get("action_items", [])
+        _index_meeting_chunks(meeting, settings, store)
+        await _generate_full_analysis(meeting, store, intelligence)
         await repo.save(meeting)
     return ActionItemsResponse(meeting_id=meeting.meeting_id, action_items=meeting.action_items)
 
@@ -335,19 +401,15 @@ async def get_action_items(
 @router.get("/decisions/{meeting_id}", response_model=DecisionsResponse)
 async def get_decisions(
     meeting_id: UUID,
+    settings: Settings = SETTINGS_DEP,
     repo: MeetingRepository = REPOSITORY_DEP,
     store: ChromaMeetingStore = VECTOR_STORE_DEP,
     intelligence: MeetingIntelligenceService = INTELLIGENCE_DEP,
 ):
     meeting = await _get_existing_meeting(meeting_id, repo)
     if not meeting.decisions:
-        workflow = MeetingIntelligenceWorkflow(store, intelligence)
-        result = await workflow.run(
-            question="Extract decisions",
-            meeting=meeting,
-            intent="decisions",
-        )
-        meeting.decisions = result.get("decisions", [])
+        _index_meeting_chunks(meeting, settings, store)
+        await _generate_full_analysis(meeting, store, intelligence)
         await repo.save(meeting)
     return DecisionsResponse(meeting_id=meeting.meeting_id, decisions=meeting.decisions)
 
@@ -355,19 +417,15 @@ async def get_decisions(
 @router.get("/risks/{meeting_id}", response_model=RisksResponse)
 async def get_risks(
     meeting_id: UUID,
+    settings: Settings = SETTINGS_DEP,
     repo: MeetingRepository = REPOSITORY_DEP,
     store: ChromaMeetingStore = VECTOR_STORE_DEP,
     intelligence: MeetingIntelligenceService = INTELLIGENCE_DEP,
 ):
     meeting = await _get_existing_meeting(meeting_id, repo)
     if not meeting.risks:
-        workflow = MeetingIntelligenceWorkflow(store, intelligence)
-        result = await workflow.run(
-            question="Extract risks",
-            meeting=meeting,
-            intent="risks",
-        )
-        meeting.risks = result.get("risks", [])
+        _index_meeting_chunks(meeting, settings, store)
+        await _generate_full_analysis(meeting, store, intelligence)
         await repo.save(meeting)
     return RisksResponse(meeting_id=meeting.meeting_id, risks=meeting.risks)
 
@@ -375,20 +433,18 @@ async def get_risks(
 @router.get("/email-draft/{meeting_id}", response_model=EmailDraftResponse)
 async def get_email_draft(
     meeting_id: UUID,
+    settings: Settings = SETTINGS_DEP,
     repo: MeetingRepository = REPOSITORY_DEP,
     store: ChromaMeetingStore = VECTOR_STORE_DEP,
     intelligence: MeetingIntelligenceService = INTELLIGENCE_DEP,
 ):
     meeting = await _get_existing_meeting(meeting_id, repo)
     if not meeting.follow_ups:
-        workflow = MeetingIntelligenceWorkflow(store, intelligence)
-        result = await workflow.run(
-            question="Draft follow-up email",
-            meeting=meeting,
-            intent="email_draft",
-        )
-        meeting.follow_ups = [result["email"]]
+        _index_meeting_chunks(meeting, settings, store)
+        await _generate_full_analysis(meeting, store, intelligence)
         await repo.save(meeting)
+    if not meeting.follow_ups:
+        raise NotFoundError("Email draft not generated yet")
     return EmailDraftResponse(meeting_id=meeting.meeting_id, email=meeting.follow_ups[0])
 
 

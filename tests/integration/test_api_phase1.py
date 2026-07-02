@@ -1,6 +1,7 @@
 from fastapi.testclient import TestClient
 
 from meeting_intel.api.app import create_app
+from meeting_intel.api.dependencies import intelligence_dep
 
 
 def test_upload_summarize_and_ask_offline():
@@ -102,3 +103,66 @@ def test_phase2_structured_intelligence_endpoints_offline():
     assert meeting["decisions"]
     assert meeting["risks"]
     assert meeting["follow_ups"]
+
+
+def test_fresh_upload_populates_every_workspace_tab():
+    client = TestClient(create_app())
+    transcript = (
+        "Asha: We need the demo ready by Friday.\n"
+        "Rahul: I will finish the API by Friday.\n"
+        "Mina: We agreed to ship behind a feature flag.\n"
+        "Asha: Vendor access is a risk for QA."
+    )
+
+    upload_response = client.post(
+        "/upload",
+        json={"title": "Workspace Ready", "text": transcript, "participants": ["Asha", "Rahul"]},
+    )
+
+    assert upload_response.status_code == 200
+    uploaded_meeting = upload_response.json()["meeting"]
+    meeting_id = uploaded_meeting["meeting_id"]
+    assert uploaded_meeting["summary"]
+    assert uploaded_meeting["action_items"]
+    assert uploaded_meeting["decisions"]
+    assert uploaded_meeting["risks"]
+    assert uploaded_meeting["follow_ups"]
+
+    transcript_response = client.get(f"/transcript/{meeting_id}")
+    assert transcript_response.status_code == 200
+    assert transcript_response.json()["meeting"]["transcript"]
+
+    summary_response = client.get(f"/summary/{meeting_id}")
+    assert summary_response.status_code == 200
+    assert summary_response.json()["meeting"]["summary"]
+
+    action_response = client.get(f"/action-items/{meeting_id}")
+    assert action_response.status_code == 200
+    assert action_response.json()["action_items"]
+
+    decisions_response = client.get(f"/decisions/{meeting_id}")
+    assert decisions_response.status_code == 200
+    assert decisions_response.json()["decisions"]
+
+    risks_response = client.get(f"/risks/{meeting_id}")
+    assert risks_response.status_code == 200
+    assert risks_response.json()["risks"]
+
+    email_response = client.get(f"/email-draft/{meeting_id}")
+    assert email_response.status_code == 200
+    assert email_response.json()["email"]["body"]
+
+
+def test_analysis_generation_failure_returns_503():
+    class BrokenIntelligence:
+        async def summarize(self, meeting):
+            raise RuntimeError("provider down")
+
+    app = create_app()
+    app.dependency_overrides[intelligence_dep] = lambda: BrokenIntelligence()
+    client = TestClient(app)
+
+    response = client.post("/upload", json={"title": "Broken", "text": "Asha: Hello"})
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "LLM provider unavailable while generating meeting analysis"
