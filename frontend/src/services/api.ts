@@ -65,6 +65,12 @@ const meetingSchema = z.object({
   decisions: z.array(decisionSchema),
   risks: z.array(riskSchema),
   follow_ups: z.array(emailDraftSchema),
+  embeddings_metadata: z
+    .object({
+      analysis_mode: z.enum(["llm", "heuristic"]).optional(),
+    })
+    .catchall(z.unknown())
+    .default({}),
 });
 
 const meetingResponseSchema = z.object({ meeting: meetingSchema });

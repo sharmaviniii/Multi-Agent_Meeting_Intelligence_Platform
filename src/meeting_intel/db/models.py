@@ -31,6 +31,7 @@ class MeetingModel(Base):
     meeting_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     participants: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
     transcript: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    analysis_metadata: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     normalized_schema_version: Mapped[str] = mapped_column(
         String(50),
         nullable=False,

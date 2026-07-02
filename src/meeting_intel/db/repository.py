@@ -62,6 +62,7 @@ class SQLAlchemyMeetingRepository(MeetingRepository):
             existing.meeting_date = meeting.date
             existing.participants = meeting.participants
             existing.transcript = [turn.model_dump(mode="json") for turn in meeting.transcript]
+            existing.analysis_metadata = meeting.embeddings_metadata
 
             session.execute(
                 delete(SummaryModel).where(SummaryModel.meeting_id == meeting.meeting_id)
@@ -139,6 +140,7 @@ class SQLAlchemyMeetingRepository(MeetingRepository):
                 decisions=[self._decision_from_row(item) for item in decision_rows],
                 risks=[self._risk_from_row(item) for item in risk_rows],
                 follow_ups=[self._follow_up_from_row(item) for item in follow_up_rows],
+                embeddings_metadata=row.analysis_metadata or {},
                 source_type=row.source_type,
             )
 

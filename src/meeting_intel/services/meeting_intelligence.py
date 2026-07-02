@@ -105,6 +105,31 @@ class MeetingIntelligenceService:
             tone=tone,
         )
 
+    def generate_heuristic_summary(self, meeting: MeetingDocument) -> str:
+        participants = ", ".join(meeting.participants[:6]) or "the meeting participants"
+        themes = self._keyword_themes(meeting)
+        first_turns = " ".join(turn.text for turn in meeting.transcript[:3])
+        preview = " ".join(first_turns.split())[:300]
+        theme_text = f" Key themes: {', '.join(themes)}." if themes else ""
+        return (
+            f"{meeting.title} included discussion among {participants}. "
+            f"{preview or 'The transcript was captured for review.'}{theme_text}"
+        )
+
+    def generate_heuristic_analysis(self, meeting: MeetingDocument) -> None:
+        meeting.summary = self.generate_heuristic_summary(meeting)
+        meeting.action_items = self._offline_action_items(meeting)
+        meeting.decisions = self._offline_decisions(meeting)
+        meeting.risks = self._offline_risks(meeting)
+        meeting.follow_ups = [
+            self._offline_email(
+                meeting,
+                audience="meeting participants",
+                tone="professional",
+                include_sections=["summary", "actions", "decisions", "risks"],
+            )
+        ]
+
     def _offline_action_items(self, meeting: MeetingDocument) -> list[ActionItem]:
         action_items = []
         cues = (" will ", " need to ", " needs to ", " should ", " by ")
@@ -185,6 +210,39 @@ class MeetingIntelligenceService:
             body="\n".join(lines),
             tone=tone,
         )
+
+    def _keyword_themes(self, meeting: MeetingDocument) -> list[str]:
+        stop_words = {
+            "about",
+            "after",
+            "again",
+            "also",
+            "because",
+            "before",
+            "could",
+            "from",
+            "have",
+            "meeting",
+            "need",
+            "should",
+            "that",
+            "their",
+            "there",
+            "this",
+            "will",
+            "with",
+            "would",
+        }
+        counts: dict[str, int] = {}
+        for word in meeting.transcript_text.lower().replace(":", " ").split():
+            normalized = "".join(character for character in word if character.isalnum())
+            if len(normalized) < 4 or normalized in stop_words:
+                continue
+            counts[normalized] = counts.get(normalized, 0) + 1
+        return [
+            word
+            for word, _ in sorted(counts.items(), key=lambda item: (-item[1], item[0]))[:5]
+        ]
 
     def _email_context(
         self,

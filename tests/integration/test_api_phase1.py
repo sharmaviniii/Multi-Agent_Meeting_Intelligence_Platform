@@ -2,6 +2,10 @@ from fastapi.testclient import TestClient
 
 from meeting_intel.api.app import create_app
 from meeting_intel.api.dependencies import intelligence_dep
+from meeting_intel.core.config import Settings
+from meeting_intel.schemas import ActionItem, Decision, FollowUp, Risk
+from meeting_intel.services.llm import LLMClient
+from meeting_intel.services.meeting_intelligence import MeetingIntelligenceService
 
 
 def test_upload_summarize_and_ask_offline():
@@ -153,16 +157,87 @@ def test_fresh_upload_populates_every_workspace_tab():
     assert email_response.json()["email"]["body"]
 
 
-def test_analysis_generation_failure_returns_503():
-    class BrokenIntelligence:
+def test_upload_marks_llm_analysis_mode_when_provider_succeeds():
+    class AvailableLLM:
+        client = object()
+
+    class SuccessfulIntelligence:
+        llm = AvailableLLM()
+
         async def summarize(self, meeting):
-            raise RuntimeError("provider down")
+            return "LLM summary"
+
+        async def extract_action_items(self, meeting):
+            return [ActionItem(description="Finish the API", owner="Rahul")]
+
+        async def extract_decisions(self, meeting):
+            return [Decision(description="Ship behind a feature flag")]
+
+        async def extract_risks(self, meeting):
+            return [Risk(description="Vendor access may block QA")]
+
+        async def draft_follow_up_email(self, *args, **kwargs):
+            return FollowUp(subject="Follow-up", body="Thanks team.")
+
+    app = create_app()
+    app.dependency_overrides[intelligence_dep] = lambda: SuccessfulIntelligence()
+    client = TestClient(app)
+
+    response = client.post(
+        "/upload",
+        json={"title": "LLM", "text": "Asha: We agreed to ship behind a feature flag."},
+    )
+
+    assert response.status_code == 200
+    meeting = response.json()["meeting"]
+    assert meeting["summary"] == "LLM summary"
+    assert meeting["embeddings_metadata"]["analysis_mode"] == "llm"
+
+
+def test_openai_failure_falls_back_to_heuristic_analysis():
+    fallback = MeetingIntelligenceService(Settings(offline_mode=True), LLMClient(Settings()))
+
+    class BrokenIntelligence:
+        llm = type("UnavailableLLM", (), {"client": object()})()
+
+        async def summarize(self, meeting):
+            raise RuntimeError("provider rate limited")
+
+        def generate_heuristic_analysis(self, meeting):
+            fallback.generate_heuristic_analysis(meeting)
 
     app = create_app()
     app.dependency_overrides[intelligence_dep] = lambda: BrokenIntelligence()
     client = TestClient(app)
 
-    response = client.post("/upload", json={"title": "Broken", "text": "Asha: Hello"})
+    response = client.post(
+        "/upload",
+        json={
+            "title": "Fallback",
+            "text": (
+                "Asha: We need the demo ready by Friday.\n"
+                "Rahul: I will finish the API by Friday.\n"
+                "Mina: We agreed to ship behind a feature flag.\n"
+                "Asha: Vendor access is a risk for QA."
+            ),
+        },
+    )
 
-    assert response.status_code == 503
-    assert response.json()["detail"] == "LLM provider unavailable while generating meeting analysis"
+    assert response.status_code == 200
+    meeting = response.json()["meeting"]
+    assert meeting["summary"]
+    assert meeting["action_items"]
+    assert meeting["decisions"]
+    assert meeting["risks"]
+    assert meeting["follow_ups"]
+    assert meeting["embeddings_metadata"]["analysis_mode"] == "heuristic"
+
+
+def test_upload_succeeds_when_provider_unavailable():
+    response = TestClient(create_app()).post(
+        "/upload",
+        json={"title": "No Provider", "text": "Asha: We need the demo ready by Friday."},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["meeting"]["embeddings_metadata"]["analysis_mode"] == "heuristic"

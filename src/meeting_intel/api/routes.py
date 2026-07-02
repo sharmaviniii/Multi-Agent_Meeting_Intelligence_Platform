@@ -132,13 +132,18 @@ async def _generate_full_analysis(
             email = result.get("email")
             if email is not None:
                 meeting.follow_ups = [email]
-    except Exception as exc:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="LLM provider unavailable while generating meeting analysis",
-        ) from exc
+        meeting.embeddings_metadata["analysis_mode"] = (
+            "llm" if _llm_available(intelligence) else "heuristic"
+        )
+    except Exception:
+        intelligence.generate_heuristic_analysis(meeting)
+        meeting.embeddings_metadata["analysis_mode"] = "heuristic"
 
     meeting.embeddings_metadata["analysis_generated"] = True
+
+
+def _llm_available(intelligence: MeetingIntelligenceService) -> bool:
+    return getattr(getattr(intelligence, "llm", None), "client", None) is not None
 
 
 async def _run_analysis_workflow(workflow: MeetingIntelligenceWorkflow, **kwargs):

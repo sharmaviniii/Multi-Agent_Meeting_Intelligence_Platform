@@ -40,8 +40,14 @@ export default function SummaryTab({ meetingId, meetingTitle }: SummaryTabProps)
 }
 
 function SummaryContent({ meeting }: { meeting: Meeting }) {
+  const isHeuristic = meeting.embeddings_metadata.analysis_mode === "heuristic";
   return (
     <>
+      {isHeuristic ? (
+        <div className="mb-4 rounded-lg border border-border bg-muted px-4 py-3 text-sm text-muted-foreground">
+          Generated using local analysis engine
+        </div>
+      ) : null}
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1.5fr)_minmax(20rem,1fr)]">
         <SummaryCard
           className="lg:row-span-2"
