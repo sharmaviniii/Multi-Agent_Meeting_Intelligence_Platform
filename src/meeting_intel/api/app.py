@@ -19,12 +19,23 @@ def create_app() -> FastAPI:
     "ChromaDB retrieval, and GPT-4o-mini summarization."),   )
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["http://localhost:5173"],
+        allow_origins=[
+        "http://localhost:5173",
+        "https://multi-agent-meeting-intelligence-pl.vercel.app",],
         allow_credentials=True,
-        allow_methods=["GET", "POST", "OPTIONS"],
-        allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
+        allow_methods=["*"], #["GET", "POST", "OPTIONS"],
+        allow_headers=["*"], #["Authorization", "Content-Type", "X-Request-ID"],
         expose_headers=["X-Request-ID"],
     )
+    @app.get("/", tags=["Health"])
+    async def health():
+        return {
+            "service": settings.service_name,
+            "status": "healthy",
+            "environment": settings.app_env,
+            "offline_mode": settings.offline_mode,
+            "version": "0.1.0",
+        }
     app.add_middleware(RequestContextMiddleware)
     install_exception_handlers(app)
     app.include_router(router)
