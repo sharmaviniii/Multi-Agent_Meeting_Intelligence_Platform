@@ -32,8 +32,7 @@ class Settings:
     openai_api_key: str | None = os.getenv("OPENAI_API_KEY") or None
     openai_model: str = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
     embedding_model: str = os.getenv("EMBEDDING_MODEL", "BAAI/bge-small-en-v1.5")
-    chroma_host: str = os.getenv("CHROMA_HOST", "localhost")
-    chroma_port: int = _int_env("CHROMA_PORT", 8000)
+    chroma_path: str = os.getenv("CHROMA_PATH", "./chroma")
     chroma_collection: str = os.getenv("CHROMA_COLLECTION", "meeting_memory")
     log_level: str = os.getenv("LOG_LEVEL", "INFO")
     max_transcript_chars_for_direct_summary: int = _int_env(

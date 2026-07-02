@@ -11,8 +11,7 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-BAAI/bge-small-en-v1.5}
-      CHROMA_HOST: ${CHROMA_HOST:-chroma}
-      CHROMA_PORT: ${CHROMA_PORT:-8000}
+      CHROMA_PATH: ${CHROMA_PATH:-/app/chroma}
       CHROMA_COLLECTION: ${CHROMA_COLLECTION:-meeting_memory}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       MAX_TRANSCRIPT_CHARS_FOR_DIRECT_SUMMARY: ${MAX_TRANSCRIPT_CHARS_FOR_DIRECT_SUMMARY:-16000}
@@ -28,11 +27,11 @@ services:
       RATE_LIMIT_WINDOW_SECONDS: ${RATE_LIMIT_WINDOW_SECONDS:-60}
     ports:
       - "8000:8000"
+    volumes:
+      - chroma_data:/app/chroma
     depends_on:
       postgres:
         condition: service_healthy
-      chroma:
-        condition: service_started
 
   postgres:
     image: postgres:16-alpine
@@ -50,15 +49,6 @@ services:
       timeout: 5s
       retries: 10
 
-  chroma:
-    image: chromadb/chroma:0.5.5
-    environment:
-      IS_PERSISTENT: "TRUE"
-      PERSIST_DIRECTORY: /chroma/chroma
-    ports:
-      - "8001:8000"
-    volumes:
-      - chroma_data:/chroma/chroma
 
 volumes:
   postgres_data:

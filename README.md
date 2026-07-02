@@ -150,15 +150,12 @@ Set:
 
 ```text
 OFFLINE_MODE=false
-CHROMA_HOST=localhost
-CHROMA_PORT=8000
+CHROMA_PATH=./chroma
 CHROMA_COLLECTION=meeting_memory
 OPENAI_API_KEY=...
 ```
 
-Then run a ChromaDB server separately, or use the Docker Compose stack below.
-
-In Docker Compose, ChromaDB is persistent by default through the `chroma_data` volume.
+The API uses `chromadb.PersistentClient` and creates the directory automatically. In Docker Compose, ChromaDB is persistent through the `chroma_data` volume mounted at `/app/chroma`. On Render, set `CHROMA_PATH` to the mounted persistent disk path.
 
 ## PostgreSQL Persistence
 
@@ -214,8 +211,7 @@ The API container uses this default database URL:
 postgresql+psycopg://meeting_intel:meeting_intel@postgres:5432/meeting_intel
 ```
 
-ChromaDB is exposed on host port `8001` and is addressed by the API as `chroma:8000`
-inside the Compose network.
+ChromaDB persistence is embedded in the API process through `chromadb.PersistentClient`. Compose mounts `chroma_data` at `/app/chroma`; production deployments can override this with `CHROMA_PATH`.
 
 ## Security And Operations
 

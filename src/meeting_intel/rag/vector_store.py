@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from meeting_intel.core.config import Settings
 from meeting_intel.rag.chunking import TextChunk
 from meeting_intel.rag.embeddings import LocalEmbeddingModel, MockEmbeddingModel
@@ -65,10 +67,9 @@ class ChromaMeetingStore:
         if self._collection is None:
             import chromadb
 
-            client = chromadb.HttpClient(
-                host=self.settings.chroma_host,
-                port=self.settings.chroma_port,
-            )
+            chroma_path = Path(self.settings.chroma_path)
+            chroma_path.mkdir(parents=True, exist_ok=True)
+            client = chromadb.PersistentClient(path=str(chroma_path))
             self._collection = client.get_or_create_collection(
                 self.settings.chroma_collection,
                 metadata={"hnsw:space": "cosine"},
