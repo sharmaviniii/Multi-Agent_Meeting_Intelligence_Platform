@@ -6,7 +6,7 @@ The platform currently implements a working meeting intelligence MVP:
 - MeetingBank downloader and ingestion pipeline
 - Transcript normalization
 - Chunking
-- Embedding generation with OpenAI `text-embedding-3-small`
+- Dependency-free deterministic hash embeddings
 - ChromaDB integration using the single `meeting_memory` collection
 - GPT-4o-mini summarization
 - Offline development mode with mock LLM and mock embeddings
@@ -35,7 +35,7 @@ Offline mode:
 - Does not call OpenAI.
 - Does not require ChromaDB.
 - Does not download the local embedding model.
-- Uses deterministic mock embeddings and mock summaries.
+- Uses deterministic hash embeddings and mock summaries.
 - Lets unit tests run without external services.
 
 Production mode:
@@ -44,7 +44,7 @@ Production mode:
 - Set `OPENAI_API_KEY` to enable GPT-4o-mini calls.
 - Set `JWT_SECRET` to require bearer JWT authentication on protected endpoints.
 - Uses `OPENAI_MODEL=gpt-4o-mini` by default.
-- Uses OpenAI `text-embedding-3-small` embeddings in production and deterministic mock embeddings offline.
+- Uses deterministic hash embeddings for Chroma retrieval in all environments.
 - Stores and retrieves vectors from the configured ChromaDB collection.
 
 ## Run API Locally
@@ -185,7 +185,7 @@ The Compose stack includes:
 - ChromaDB container
 
 By default, the API still starts with `OFFLINE_MODE=true`, so it uses mock LLM responses,
-mock embeddings, and in-memory meeting persistence.
+hash embeddings, and in-memory meeting persistence.
 
 Run:
 

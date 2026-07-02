@@ -146,7 +146,7 @@ class EmbeddingMetadataModel(Base):
     embedding_model: Mapped[str] = mapped_column(
         String(255),
         nullable=False,
-        default="text-embedding-3-small",
+        default="hash-embedding-384",
     )
     artifact_type: Mapped[str] = mapped_column(String(50), nullable=False)
     chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)

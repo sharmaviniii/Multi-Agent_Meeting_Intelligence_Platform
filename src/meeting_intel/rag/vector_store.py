@@ -2,7 +2,7 @@ from pathlib import Path
 
 from meeting_intel.core.config import Settings
 from meeting_intel.rag.chunking import TextChunk
-from meeting_intel.rag.embeddings import MockEmbeddingModel, OpenAIEmbeddingModel
+from meeting_intel.rag.embeddings import HashEmbeddingModel
 
 
 def cosine_similarity(left: list[float], right: list[float]) -> float:
@@ -10,7 +10,7 @@ def cosine_similarity(left: list[float], right: list[float]) -> float:
 
 
 class InMemoryMeetingStore:
-    def __init__(self, embedding_model: OpenAIEmbeddingModel | MockEmbeddingModel) -> None:
+    def __init__(self, embedding_model: HashEmbeddingModel) -> None:
         self.embedding_model = embedding_model
         self._records: dict[str, dict] = {}
 
@@ -53,7 +53,7 @@ class ChromaMeetingStore:
     def __init__(
         self,
         settings: Settings,
-        embedding_model: OpenAIEmbeddingModel | MockEmbeddingModel,
+        embedding_model: HashEmbeddingModel,
     ) -> None:
         self.settings = settings
         self.embedding_model = embedding_model

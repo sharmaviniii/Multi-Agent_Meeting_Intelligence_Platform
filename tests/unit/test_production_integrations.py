@@ -2,17 +2,16 @@ from pathlib import Path
 
 from meeting_intel.core.config import Settings
 from meeting_intel.rag.embeddings import (
+    HashEmbeddingModel,
     MockEmbeddingModel,
-    OpenAIEmbeddingModel,
     get_embedding_model,
 )
 from meeting_intel.services.llm import LLMClient
 
 
-def test_production_embedding_dependencies_are_declared():
+def test_production_embedding_dependencies_are_self_contained():
     dependencies = Path("pyproject.toml").read_text(encoding="utf-8")
 
-    assert '"openai>=1.40.0"' in dependencies
     assert "sentence-transformers" not in dependencies
     assert '"torch' not in dependencies
 
@@ -36,33 +35,33 @@ def test_llm_client_requires_openai_key_for_production():
 
 
 def test_embedding_factory_preserves_offline_mock_mode():
-    settings = Settings(offline_mode=True, openai_api_key="test-key")
+    settings = Settings(offline_mode=True, embedding_model="hash-embedding-384")
 
     model = get_embedding_model(settings)
 
     assert isinstance(model, MockEmbeddingModel)
-    assert model.model_name == "mock-embedding"
+    assert model.model_name == "hash-embedding-384"
 
 
-def test_embedding_factory_uses_openai_model_in_production_mode():
+def test_embedding_factory_uses_hash_model_in_production_mode_without_openai_key():
     settings = Settings(
         offline_mode=False,
-        openai_api_key="test-key",
-        embedding_model="text-embedding-3-small",
+        openai_api_key=None,
+        embedding_model="hash-embedding-384",
     )
 
     model = get_embedding_model(settings)
 
-    assert isinstance(model, OpenAIEmbeddingModel)
-    assert model.model_name == "text-embedding-3-small"
+    assert isinstance(model, HashEmbeddingModel)
+    assert model.model_name == "hash-embedding-384"
 
 
-def test_embedding_factory_requires_openai_key_in_production_mode():
-    settings = Settings(offline_mode=False, openai_api_key=None)
+def test_hash_embeddings_are_deterministic_and_dimensioned():
+    model = HashEmbeddingModel(dimensions=384)
 
-    try:
-        get_embedding_model(settings)
-    except RuntimeError as exc:
-        assert "OPENAI_API_KEY" in str(exc)
-    else:
-        raise AssertionError("Expected production embeddings to require OPENAI_API_KEY")
+    first = model.embed_query("Asha will finish the API")
+    second = model.embed_query("Asha will finish the API")
+
+    assert first == second
+    assert len(first) == 384
+    assert any(value for value in first)
