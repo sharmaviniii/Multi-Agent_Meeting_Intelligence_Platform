@@ -40,8 +40,6 @@ class SQLAlchemyMeetingRepository(MeetingRepository):
         self.session_factory = session_factory
 
     async def save(self, meeting: MeetingDocument) -> MeetingDocument:
-        from sqlalchemy import delete
-
         from meeting_intel.db.models import (
             ActionItemModel,
             DecisionModel,
@@ -64,33 +62,20 @@ class SQLAlchemyMeetingRepository(MeetingRepository):
             existing.transcript = [turn.model_dump(mode="json") for turn in meeting.transcript]
             existing.analysis_metadata = meeting.embeddings_metadata
 
-            session.execute(
-                delete(SummaryModel).where(SummaryModel.meeting_id == meeting.meeting_id)
-            )
-            session.execute(
-                delete(ActionItemModel).where(ActionItemModel.meeting_id == meeting.meeting_id)
-            )
-            session.execute(
-                delete(DecisionModel).where(DecisionModel.meeting_id == meeting.meeting_id)
-            )
-            session.execute(delete(RiskModel).where(RiskModel.meeting_id == meeting.meeting_id))
-            session.execute(
-                delete(FollowUpModel).where(FollowUpModel.meeting_id == meeting.meeting_id)
-            )
-
             if meeting.summary:
-                session.add(
-                    SummaryModel(
-                        meeting_id=meeting.meeting_id,
-                        executive_summary=meeting.summary,
-                        topics=[],
-                        open_questions=[],
-                    )
+                existing.summary = SummaryModel(
+                    executive_summary=meeting.summary,
+                    topics=[],
+                    open_questions=[],
                 )
-            session.add_all(self._action_item_rows(meeting))
-            session.add_all(self._decision_rows(meeting))
-            session.add_all(self._risk_rows(meeting))
-            session.add_all(self._follow_up_rows(meeting))
+            else:
+                existing.summary = None
+
+            existing.action_items = self._action_item_rows(meeting, existing)
+            existing.decisions = self._decision_rows(meeting, existing)
+            existing.risks = self._risk_rows(meeting, existing)
+            existing.follow_ups = self._follow_up_rows(meeting, existing)
+
             session.commit()
         return meeting
 
@@ -144,13 +129,13 @@ class SQLAlchemyMeetingRepository(MeetingRepository):
                 source_type=row.source_type,
             )
 
-    def _action_item_rows(self, meeting: MeetingDocument) -> list:
+    def _action_item_rows(self, meeting: MeetingDocument, parent) -> list:
         from meeting_intel.db.models import ActionItemModel
 
         return [
             ActionItemModel(
                 id=item.id,
-                meeting_id=meeting.meeting_id,
+                meeting=parent,
                 description=item.description,
                 owner=item.owner,
                 due_date=self._parse_date(item.due_date),
@@ -161,13 +146,13 @@ class SQLAlchemyMeetingRepository(MeetingRepository):
             for item in meeting.action_items
         ]
 
-    def _decision_rows(self, meeting: MeetingDocument) -> list:
+    def _decision_rows(self, meeting: MeetingDocument, parent) -> list:
         from meeting_intel.db.models import DecisionModel
 
         return [
             DecisionModel(
                 id=item.id,
-                meeting_id=meeting.meeting_id,
+                meeting=parent,
                 description=item.description,
                 owner=item.owner,
                 rationale=item.rationale,
@@ -176,13 +161,13 @@ class SQLAlchemyMeetingRepository(MeetingRepository):
             for item in meeting.decisions
         ]
 
-    def _risk_rows(self, meeting: MeetingDocument) -> list:
+    def _risk_rows(self, meeting: MeetingDocument, parent) -> list:
         from meeting_intel.db.models import RiskModel
 
         return [
             RiskModel(
                 id=item.id,
-                meeting_id=meeting.meeting_id,
+                meeting=parent,
                 description=item.description,
                 severity=item.severity,
                 probability=item.probability,
@@ -193,13 +178,13 @@ class SQLAlchemyMeetingRepository(MeetingRepository):
             for item in meeting.risks
         ]
 
-    def _follow_up_rows(self, meeting: MeetingDocument) -> list:
+    def _follow_up_rows(self, meeting: MeetingDocument, parent) -> list:
         from meeting_intel.db.models import FollowUpModel
 
         return [
             FollowUpModel(
                 id=item.id,
-                meeting_id=meeting.meeting_id,
+                meeting=parent,
                 recipient=item.recipient,
                 subject=item.subject,
                 body=item.body,

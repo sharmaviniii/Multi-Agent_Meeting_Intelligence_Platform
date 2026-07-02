@@ -1,8 +1,14 @@
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
 from fastapi.testclient import TestClient
 
 from meeting_intel.api.app import create_app
-from meeting_intel.api.dependencies import intelligence_dep
+from meeting_intel.api.dependencies import intelligence_dep, repository_dep
 from meeting_intel.core.config import Settings
+from meeting_intel.db.models import Base
+from meeting_intel.db.repository import SQLAlchemyMeetingRepository
+from meeting_intel.ingestion.parsers import parse_transcript_text
 from meeting_intel.schemas import ActionItem, Decision, FollowUp, Risk
 from meeting_intel.services.llm import LLMClient
 from meeting_intel.services.meeting_intelligence import MeetingIntelligenceService
@@ -100,6 +106,59 @@ def test_phase2_structured_intelligence_endpoints_offline():
     )
     assert email_response.status_code == 200
     assert email_response.json()["email"]["subject"] == "Follow-up: Phase 2 Demo"
+
+    meeting_response = client.get(f"/meetings/{meeting_id}")
+    meeting = meeting_response.json()["meeting"]
+    assert meeting["action_items"]
+    assert meeting["decisions"]
+    assert meeting["risks"]
+    assert meeting["follow_ups"]
+
+
+def test_upload_analysis_and_retrieval_with_sqlalchemy_repository(tmp_path):
+    db_path = tmp_path / 'test_api.db'
+    engine = create_engine(f'sqlite:///{db_path}', future=True)
+    Base.metadata.create_all(engine)
+    session_factory = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
+    repo = SQLAlchemyMeetingRepository(session_factory)
+
+    app = create_app()
+    app.dependency_overrides[repository_dep] = lambda: repo
+
+    client = TestClient(app)
+    transcript = (
+        "Asha: We need the demo ready by Friday.\n"
+        "Rahul: I will finish the API by Friday.\n"
+        "Mina: We agreed to ship behind a feature flag.\n"
+        "Asha: Vendor access is a risk for QA."
+    )
+
+    upload_response = client.post(
+        "/upload",
+        json={"title": "SQLAlchemy Demo", "text": transcript, "participants": ["Asha", "Rahul"]},
+    )
+    assert upload_response.status_code == 200
+    meeting_id = upload_response.json()["meeting"]["meeting_id"]
+
+    action_response = client.post("/action-items", json={"meeting_id": meeting_id})
+    assert action_response.status_code == 200
+    assert action_response.json()["meeting_id"] == meeting_id
+    assert action_response.json()["action_items"]
+
+    decisions_response = client.post("/decisions", json={"meeting_id": meeting_id})
+    assert decisions_response.status_code == 200
+    assert decisions_response.json()["decisions"]
+
+    risks_response = client.post("/risks", json={"meeting_id": meeting_id})
+    assert risks_response.status_code == 200
+    assert risks_response.json()["risks"]
+
+    email_response = client.post(
+        "/email-draft",
+        json={"meeting_id": meeting_id, "audience": "team", "tone": "professional"},
+    )
+    assert email_response.status_code == 200
+    assert email_response.json()["email"]["subject"] == "Follow-up: SQLAlchemy Demo"
 
     meeting_response = client.get(f"/meetings/{meeting_id}")
     meeting = meeting_response.json()["meeting"]
