@@ -2,8 +2,8 @@ from pathlib import Path
 
 from meeting_intel.core.config import Settings
 from meeting_intel.rag.embeddings import (
-    LocalEmbeddingModel,
     MockEmbeddingModel,
+    OpenAIEmbeddingModel,
     get_embedding_model,
 )
 from meeting_intel.services.llm import LLMClient
@@ -12,8 +12,9 @@ from meeting_intel.services.llm import LLMClient
 def test_production_embedding_dependencies_are_declared():
     dependencies = Path("pyproject.toml").read_text(encoding="utf-8")
 
-    assert '"sentence-transformers>=5.0.0"' in dependencies
-    assert '"torch>=2.8.0"' in dependencies
+    assert '"openai>=1.40.0"' in dependencies
+    assert "sentence-transformers" not in dependencies
+    assert '"torch' not in dependencies
 
 
 def test_llm_client_stays_offline_without_credentials():
@@ -35,14 +36,33 @@ def test_llm_client_requires_openai_key_for_production():
 
 
 def test_embedding_factory_preserves_offline_mock_mode():
-    model = get_embedding_model("BAAI/bge-small-en-v1.5", offline_mode=True)
+    settings = Settings(offline_mode=True, openai_api_key="test-key")
+
+    model = get_embedding_model(settings)
 
     assert isinstance(model, MockEmbeddingModel)
     assert model.model_name == "mock-embedding"
 
 
-def test_embedding_factory_uses_bge_model_in_production_mode():
-    model = get_embedding_model("BAAI/bge-small-en-v1.5", offline_mode=False)
+def test_embedding_factory_uses_openai_model_in_production_mode():
+    settings = Settings(
+        offline_mode=False,
+        openai_api_key="test-key",
+        embedding_model="text-embedding-3-small",
+    )
 
-    assert isinstance(model, LocalEmbeddingModel)
-    assert model.model_name == "BAAI/bge-small-en-v1.5"
+    model = get_embedding_model(settings)
+
+    assert isinstance(model, OpenAIEmbeddingModel)
+    assert model.model_name == "text-embedding-3-small"
+
+
+def test_embedding_factory_requires_openai_key_in_production_mode():
+    settings = Settings(offline_mode=False, openai_api_key=None)
+
+    try:
+        get_embedding_model(settings)
+    except RuntimeError as exc:
+        assert "OPENAI_API_KEY" in str(exc)
+    else:
+        raise AssertionError("Expected production embeddings to require OPENAI_API_KEY")

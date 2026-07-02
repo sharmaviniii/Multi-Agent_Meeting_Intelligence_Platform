@@ -7,7 +7,7 @@ from meeting_intel.rag.vector_store import ChromaMeetingStore, rerank
 
 def test_offline_vector_store_retrieves_relevant_chunk():
     settings = Settings(offline_mode=True)
-    embeddings = get_embedding_model(settings.embedding_model, offline_mode=True)
+    embeddings = get_embedding_model(settings)
     store = ChromaMeetingStore(settings, embeddings)
     meeting = parse_transcript_text(
         "Asha: The payments API must be ready Friday.\n"

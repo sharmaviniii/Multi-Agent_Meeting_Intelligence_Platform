@@ -2,6 +2,8 @@ import hashlib
 import math
 from functools import lru_cache
 
+from meeting_intel.core.config import Settings
+
 
 class MockEmbeddingModel:
     """Deterministic local embeddings for OFFLINE_MODE and tests."""
@@ -23,32 +25,29 @@ class MockEmbeddingModel:
         return [value / norm for value in vector]
 
 
-class LocalEmbeddingModel:
-    """SentenceTransformer wrapper for BAAI/bge-small-en-v1.5."""
+class OpenAIEmbeddingModel:
+    """OpenAI embeddings for production vector search."""
 
-    def __init__(self, model_name: str = "BAAI/bge-small-en-v1.5") -> None:
-        self.model_name = model_name
-        self._model = None
+    def __init__(self, settings: Settings) -> None:
+        if not settings.openai_api_key:
+            raise RuntimeError("OPENAI_API_KEY is required when OFFLINE_MODE=false")
+        from openai import OpenAI
 
-    @property
-    def model(self):
-        if self._model is None:
-            from sentence_transformers import SentenceTransformer
-
-            self._model = SentenceTransformer(self.model_name)
-        return self._model
+        self.client = OpenAI(api_key=settings.openai_api_key)
+        self.model_name = settings.embedding_model
 
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
-        return self.model.encode(texts, normalize_embeddings=True).tolist()
+        if not texts:
+            return []
+        response = self.client.embeddings.create(model=self.model_name, input=texts)
+        return [item.embedding for item in response.data]
 
     def embed_query(self, text: str) -> list[float]:
         return self.embed_documents([text])[0]
 
 
 @lru_cache
-def get_embedding_model(
-    model_name: str = "BAAI/bge-small-en-v1.5", offline_mode: bool = False
-) -> LocalEmbeddingModel | MockEmbeddingModel:
-    if offline_mode:
+def get_embedding_model(settings: Settings) -> OpenAIEmbeddingModel | MockEmbeddingModel:
+    if settings.offline_mode:
         return MockEmbeddingModel()
-    return LocalEmbeddingModel(model_name)
+    return OpenAIEmbeddingModel(settings)

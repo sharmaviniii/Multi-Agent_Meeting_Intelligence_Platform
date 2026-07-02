@@ -146,7 +146,7 @@ class EmbeddingMetadataModel(Base):
     embedding_model: Mapped[str] = mapped_column(
         String(255),
         nullable=False,
-        default="BAAI/bge-small-en-v1.5",
+        default="text-embedding-3-small",
     )
     artifact_type: Mapped[str] = mapped_column(String(50), nullable=False)
     chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)

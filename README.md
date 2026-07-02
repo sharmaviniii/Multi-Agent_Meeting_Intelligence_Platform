@@ -6,7 +6,7 @@ The platform currently implements a working meeting intelligence MVP:
 - MeetingBank downloader and ingestion pipeline
 - Transcript normalization
 - Chunking
-- Embedding generation with `BAAI/bge-small-en-v1.5`
+- Embedding generation with OpenAI `text-embedding-3-small`
 - ChromaDB integration using the single `meeting_memory` collection
 - GPT-4o-mini summarization
 - Offline development mode with mock LLM and mock embeddings
@@ -44,7 +44,7 @@ Production mode:
 - Set `OPENAI_API_KEY` to enable GPT-4o-mini calls.
 - Set `JWT_SECRET` to require bearer JWT authentication on protected endpoints.
 - Uses `OPENAI_MODEL=gpt-4o-mini` by default.
-- Uses `BAAI/bge-small-en-v1.5` embeddings through `sentence-transformers`.
+- Uses OpenAI `text-embedding-3-small` embeddings in production and deterministic mock embeddings offline.
 - Stores and retrieves vectors from the configured ChromaDB collection.
 
 ## Run API Locally

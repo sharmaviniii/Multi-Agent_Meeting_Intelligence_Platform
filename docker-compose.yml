@@ -10,7 +10,7 @@ services:
       SERVICE_NAME: ${SERVICE_NAME:-meeting-intelligence-api}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
-      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-BAAI/bge-small-en-v1.5}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-text-embedding-3-small}
       CHROMA_PATH: ${CHROMA_PATH:-/app/chroma}
       CHROMA_COLLECTION: ${CHROMA_COLLECTION:-meeting_memory}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}

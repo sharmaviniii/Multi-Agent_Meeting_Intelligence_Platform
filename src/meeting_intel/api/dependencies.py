@@ -55,7 +55,7 @@ def vector_store_dep() -> ChromaMeetingStore:
     settings = get_settings()
     return ChromaMeetingStore(
         settings,
-        get_embedding_model(settings.embedding_model, offline_mode=settings.offline_mode),
+        get_embedding_model(settings),
     )
 
 
